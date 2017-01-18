@@ -248,6 +248,13 @@ class TerrainSegment(Entity):
 		self.model = render.get_model(segment_type)
 		self.geom = link.BvhTriangleMesh(self.sim.physics, "stone", self.model.obj.triangles, self.model.obj.triangles_texture_coords, xyz, (1, 0, 0, 0))
 
+		# Try to extract Bezier curves from the renderer model.
+		self.curves = {}
+		for curve in self.model.w.metadata["curves"]:
+			self.curves[curve["name"]] = compgeom.Bezier(curve["params"])
+#		for i in xrange(40):
+#			p = self.curves.values()[0].get_point_by_distance(i)
+
 	def draw(self):
 		link.glPushMatrix()
 		self.geom.convertIntoReferenceFrame()
@@ -433,7 +440,7 @@ class Cart(GeomOnlyPatchMixin, Entity):
 		self.geom.setAngularFactor(0.0, 0.0, 0.0)
 		self.geom.setGravity(0.0, 0.0, 0.0)
 		self.push_state = "idle"
-		self.accumulated_movement = 30.0
+		self.accumulated_movement = 0.0
 		self.current_speed = 0.0
 		self.current_theta = 0.0
 
@@ -481,12 +488,21 @@ class Cart(GeomOnlyPatchMixin, Entity):
 		self.current_speed = multiplier * self.cart_speed
 		self.accumulated_movement += self.current_speed * dt
 		#self.geom.setLinearVelocity((multiplier * self.cart_speed, 0, 0))
-		level_gen = self.sim.get_ent(lambda x: isinstance(x, RandomlyGeneratedTerrain)).lg
-		new_xyz, new_theta = level_gen.get_xyz_theta_on_path(self.accumulated_movement)
+		level_gen = self.sim.get_ent(lambda x: isinstance(x, RandomlyGeneratedTerrain))
+		if level_gen != None:
+			level_gen = level_gen.lg
+			new_xyz, new_theta = level_gen.get_xyz_theta_on_path(self.accumulated_movement)
+		else:
+			# Otherwise, look for a terrain segment with a Bezier curve.
+			level_gen = self.sim.get_ent(lambda x: isinstance(x, TerrainSegment))
+			curve = next(level_gen.curves.itervalues())
+			new_xyz = curve.get_point_by_distance(self.accumulated_movement)
+			new_theta = 0.0
 		new_xyz += np.array([0, 0, 1.0])
 		self.current_theta = 0.95 * self.current_theta + 0.05 * new_theta
 		self.geom.setPos(new_xyz)
 		self.geom.setAxisAngle((0, 0, -1, math.pi/2 - self.current_theta))
+
 
 class Player(GeomOnlyPatchMixin, Entity):
 	move_speed = 10.0
@@ -625,6 +641,6 @@ def initialize_game(sim):
 #	for i in xrange(50):
 #		sim.add_entity(Jumper, [(20.0 + i * 0.05, i * 0.05, 1.0 + i * 2.0)])
 
-#	sim.add_entity(TerrainSegment, [(0, 0, 0), "basic_units"])
-	sim.add_entity(RandomlyGeneratedTerrain, [(0, 0, 0), 10])
+	sim.add_entity(TerrainSegment, [(0, 0, 0), "trivial_test"])
+#	sim.add_entity(RandomlyGeneratedTerrain, [(0, 0, 0), 10])
 

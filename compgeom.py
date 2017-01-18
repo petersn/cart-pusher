@@ -6,7 +6,7 @@ Note: None of the routines in this are at all performant, and should not be used
 """
 
 import math, random
-#import numpy
+import numpy
 
 identity3x3 = [[+(i == j) for i in range(3)] for j in range(3)]
 
@@ -178,4 +178,77 @@ def compute_aabb_of_triangles(triangles):
 
 def point_in_aabb(point, aabb):
 	return all(aabb[0][i] <= point[i] <= aabb[1][i] for i in range(3))
+
+# === Bezier handling routines follow ===
+
+def get_curve_segment_parameters(bezier, t):
+	# Saturate at the endpoints.
+	t = max(0, min(1, t))
+	# Otherwise, decode from the appropriate segment.
+	t *= (len(bezier) - 1)
+	t, quotient = math.modf(t)
+	# Handle the funky edge case where we were passed t = 1.
+	if quotient >= len(bezier) - 1:
+		t += 1
+		quotient -= 1
+	i = int(quotient)
+	# This code reveals the packing of bezier points:
+	#   [ (knot, handle_left, handle_right), (knot, handle_left, handle_right), ... ]
+	# bezierpacking
+	left_knot, left_handle_left, left_handle_right = map(numpy.array, bezier[i])
+	right_knot, right_handle_left, right_handle_right = map(numpy.array, bezier[i+1])
+	P0, P1, P2, P3 = left_knot, left_handle_right, right_handle_left, right_knot
+	return t, (P0, P1, P2, P3)
+
+def get_point_on_segment(bezier_segment, t):
+	P0, P1, P2, P3 = bezier_segment
+	return (1 - t)**3 * P0 + 3 * (1 - t)**2 * t * P1 + 3 * (1 - t) * t**2 * P2 + t**3 * P3
+
+def get_point_on_curve(bezier, t):
+	t, (P0, P1, P2, P3) = get_curve_segment_parameters(bezier, t)
+	return (1 - t)**3 * P0 + 3 * (1 - t)**2 * t * P1 + 3 * (1 - t) * t**2 * P2 + t**3 * P3
+
+def get_derivative_on_segment(bezier_segment, t):
+	# (* Derivation in Mathematica: *)
+	# f = (1 - t)^3 p0 + 3 (1 - t)^2 t p1 + 3 (1 - t) t^2 p2 + t^3 p3
+	# (* Get a list of the four coefficients: *)
+	# Table[FullSimplify[Coefficient[D[f, t], i]], {i, {p0, p1, p2, p3}}]
+	coefs = [
+		-3 * (1 - t)**2,
+		3 * (t - 1) * (3 * t - 1),
+		3 * (2 - 3 * t) * t,
+		3 * t**2,
+	]
+	return sum(c * p for c, p in zip(coefs, bezier_segment))
+
+def get_curve_derivative(bezier, t):
+	t, bezier_segment = get_curve_segment_parameters(bezier, t)
+	return get_derivative_on_segment(bezier_segment, t)
+
+def get_arc_length_of_segment(bezier_segment):
+	bezier_segment = map(numpy.array, bezier_segment)
+	DIVISIONS = 100
+	arc_length = 0.0
+	for i in xrange(DIVISIONS):
+		arc_length += numpy.linalg.norm(get_derivative_on_segment(bezier_segment, i / float(DIVISIONS)))
+	return arc_length / DIVISIONS
+
+def get_arc_length_of_curve(bezier):
+	arc_length = 0.0
+	for i in xrange(len(bezier) - 1):
+		# The following line is a compactification of the above code tagged with bezierpacking.
+		bezier_segment = bezier[i][0], bezier[i][2], bezier[i+1][1], bezier[i+1][0]
+		arc_length += get_arc_length_of_segment(bezier_segment)
+	return arc_length
+
+class Bezier:
+	def __init__(self, bezier):
+		self.bezier = bezier
+		self.arc_length = get_arc_length_of_curve(self.bezier)
+		print "Total arc length:", self.arc_length
+
+	def get_point_by_distance(self, d):
+		t = d / self.arc_length
+		# TODO: Actually smooth out the speed!
+		return get_point_on_curve(self.bezier, t)
 
