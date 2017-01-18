@@ -186,6 +186,9 @@ class GameSimulation:
 			i = self.entities[ent_id].apply_patch(payload, i, jitter)
 
 class Entity:
+	# Set this as a backup so that objects created as children of an object in an initialization routine don't get culled.
+	do_cull = False
+
 	def serialize_patch(self):
 		return ""
 
@@ -248,12 +251,35 @@ class TerrainSegment(Entity):
 		self.model = render.get_model(segment_type)
 		self.geom = link.BvhTriangleMesh(self.sim.physics, "stone", self.model.obj.triangles, self.model.obj.triangles_texture_coords, xyz, (1, 0, 0, 0))
 
-		# Try to extract Bezier curves from the renderer model.
+		# Extract Bezier curves from the renderer model.
 		self.curves = {}
 		for curve in self.model.w.metadata["curves"]:
 			self.curves[curve["name"]] = compgeom.Bezier(curve["params"])
-#		for i in xrange(40):
-#			p = self.curves.values()[0].get_point_by_distance(i)
+
+		# If we're client side we don't try to guess the various objects to be spawned,
+		# but instead just wait for the state update to give them to us. So return here.
+		if not self.sim.is_server_side:
+			return
+
+		# Spawn appropriate entities based on the map's metadata.
+		for entity_desc in self.model.w.metadata["entities"]:
+			print entity_desc
+			thing = entity_desc["type"].lower()
+			xyz = entity_desc["xyz"]
+			if thing == "spawner":
+				# Extract the interval, defaulting to ten seconds.
+				print "SPAWNER!"
+				interval = entity_desc["properties"].get("interval", 10.0)
+				# Look for a key of the form spawn_j, which would be a Jumper spawner.
+				spawned_serialization_key = [k for k in entity_desc["properties"] if k.startswith("spawn_")][0][-1]
+				self.sim.add_entity(Spawner, [xyz, spawned_serialization_key, interval])
+			elif thing.startswith("ser_") and len(thing) == 5:
+				# This is a default construction to allow level designers to make objects of any type
+				# specifying just serialization key and object coordinates, so we don't need lots of cases.
+				constructor = serialization_key_table[thing[-1]]
+				self.sim.add_entity(constructor, [xyz])
+			else:
+				raise ValueError("Unknown entity type: %r" % (thing,))
 
 	def draw(self):
 		link.glPushMatrix()
@@ -296,7 +322,7 @@ class Block(Entity):
 		link.glPushMatrix()
 		obj.convertIntoReferenceFrame()
 		bounds = [-t1, +t1, -t2, +t2, -t3, +t3]
-		link.draw_box(bounds, obj.texture)
+		link.draw_box(bounds, "data/crate.png")
 		link.glPopMatrix()
 
 class Jumper(Entity, GeomOnlyPatchMixin, EnemyMixin):
@@ -636,7 +662,7 @@ for cls in globals().values():
 def initialize_game(sim):
 	# Create a cart at the origin.
 	sim.add_entity(Cart, [(0, 0, 1.0)])
-	sim.add_entity(EnemySpawner, [(20, 0, 2), "j", 5.0])
+#	sim.add_entity(EnemySpawner, [(20, 0, 2), "j", 5.0])
 #	sim.add_entity(BigJumper, [(21, 1, 10)])
 #	for i in xrange(50):
 #		sim.add_entity(Jumper, [(20.0 + i * 0.05, i * 0.05, 1.0 + i * 2.0)])
