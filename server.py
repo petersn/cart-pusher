@@ -35,7 +35,7 @@ def send_string(f, s):
 	f.flush()
 
 def global_data_stats_thread():
-	INTERVAL = 10.0
+	INTERVAL = 60.0
 	data_sent = 0
 	while True:
 		time.sleep(INTERVAL)
