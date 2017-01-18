@@ -220,14 +220,19 @@ extern "C" EXPORT void draw_box(float* coords, int texture_index) {
 	#define TEXTURE(x, y) \
 		glTexCoord2f(x/5.0, y/5.0);
 	TEXTURE     (xmin, ymin      );
+//	TEXTURE     (0,    0         );
 	glVertex3f  (xmin, ymin, zmax);
 	TEXTURE     (xmax, ymin      );
+//	TEXTURE     (1,    0         );
 	glVertex3f  (xmax, ymin, zmax);
 	TEXTURE     (xmax, ymax      );
+//	TEXTURE     (1,    1         );
 	glVertex3f  (xmax, ymax, zmax);
 	TEXTURE     (xmin, ymax      );
+//	TEXTURE     (0,    1         );
 	glVertex3f  (xmin, ymax, zmax);
 	// Bottom face.
+	// XXX TODO: Fix up the textures on these faces too!
 	TEXTURE     (xmin, ymax);
 	glVertex3f  (xmin, ymax, zmin);
 	TEXTURE     (xmax, ymax);
