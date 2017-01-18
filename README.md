@@ -11,5 +11,5 @@ To run:
     $ make
     $ python server.py
     ...
-    $ python client.py --name desired_handle # <-- Each client runs this.
+    $ python client.py --host server_host --name desired_handle # <-- Each client runs this.
 
