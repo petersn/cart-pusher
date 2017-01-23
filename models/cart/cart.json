@@ -1,0 +1,10 @@
+{
+  "entities": [],
+  "curves": [],
+  "doors": {},
+  "mesh_properties": {},
+  "textures": {
+    "Cart_Cube": "/home/snp/proj/cart-pusher/models/cart/cart.png"
+  },
+  "marker_locations": {}
+}
