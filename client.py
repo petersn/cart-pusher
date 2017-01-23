@@ -103,13 +103,25 @@ def main(game_options):
 	player = None
 	smoothed_xyz = np.array([0, 0, 0])
 
+	camera_orientation = [0.0, 0.0]
+	def adjust_camera(horizontal, vertical):
+		camera_orientation[0] += horizontal
+		camera_orientation[1] += vertical
+		camera_orientation[1] = min(math.pi/2, max(-math.pi/2, camera_orientation[1]))
+
 	while True:
 		# Pull our player object out, if it's been synced yet.
 		if my_player_ent_id in sim.entities:
 			player = sim.entities[my_player_ent_id]
 			player.is_actively_controlled_player = True
+		else:
+			player = None
 
-		jump_this_frame = False
+		commands_this_frame = set()
+		def issue_command(command):
+			if player:
+				player.try_to_command(command)
+				commands_this_frame.add(command)
 
 		# Process the SDL event queue.
 		while link.get_event():
@@ -118,9 +130,7 @@ def main(game_options):
 			elif link.last_event.type == link.E_KEY_DOWN:
 				keys_held.add(link.last_event.key)
 				if link.last_event.key == link.K_SPACE:
-					if player:
-						player.try_to_jump()
-					jump_this_frame = True
+					issue_command("jump")
 			elif link.last_event.type == link.E_KEY_UP:
 				if link.last_event.key in keys_held:
 					keys_held.remove(link.last_event.key)
@@ -135,19 +145,20 @@ def main(game_options):
 		x_offset = link.mouse_x.value - link.screen_width.value/2
 		y_offset = link.mouse_y.value - link.screen_height.value/2
 		if game_options.fullscreen or link.K_L_SHIFT in keys_held or link.K_R_SHIFT in keys_held:
-			if player:
-				player.adjust_camera(x_offset * CAMERA_FACING_RATE, y_offset * CAMERA_TILT_RATE)
+#			if player:
+				adjust_camera(x_offset * CAMERA_FACING_RATE, y_offset * CAMERA_TILT_RATE)
 		if game_options.fullscreen:
 			link.warp_mouse(link.screen_width.value/2, link.screen_height.value/2)
 		if player:
-			link.camera_tilt.value = math.degrees(player.tilt)
-			link.camera_facing.value = math.degrees(player.facing)
+			player.facing, player.tilt = camera_orientation
 			xyz = player.get_xyz()
 			alpha = CAMERA_SMOOTHING_FACTOR
 			smoothed_xyz = (1 - alpha) * smoothed_xyz + alpha * xyz
 			link.camera_x.value = smoothed_xyz[0]
 			link.camera_y.value = smoothed_xyz[1]
 			link.camera_z.value = smoothed_xyz[2] + player.eye_height
+		link.camera_tilt.value = math.degrees(camera_orientation[1])
+		link.camera_facing.value = math.degrees(camera_orientation[0])
 
 		move_vector = [0.0, 0.0]
 		if ord("a") in keys_held:
@@ -161,6 +172,9 @@ def main(game_options):
 		if player and USE_MOVE_PREDICTION:
 			player.input_motion_vector = move_vector
 
+		if ("mouse", 1) in keys_held:
+			issue_command("m1")
+
 		# Send an update to the server.
 		if player:
 			player_input = {
@@ -168,7 +182,7 @@ def main(game_options):
 				"tilt": player.tilt,
 #				"motion_vector": player.input_motion_vector,
 				"motion_vector": move_vector,
-				"did_jump": jump_this_frame,
+				"commands": list(commands_this_frame),
 			}
 			network_manager.player_input(player_input)
 
@@ -202,12 +216,20 @@ def main(game_options):
 		link.begin_overlay()
 
 		status_string = ""
-		if player:
-			status_string += "HP: %s/100\n" % player.hp
-
 		cart = sim.get_ent(lambda x: isinstance(x, simulation.Cart))
 		if cart:
 			status_string += "Cart state: %s\n" % cart.push_state
+
+		if player:
+			status_string += "HP: %3i/100\n" % player.hp
+			status_string += "Ammo: %2s/%s" % (player.ammo, player.max_ammo)
+			status_string += " [%2i]" % player.ammo_claim_patches
+			if player.reload_cooldown > 0.0:
+				status_string += " [%-20s]\n" % ("*" * int(20.0 * player.reload_cooldown / player.reload_interval),)
+			else:
+				status_string += "\n"
+		else:
+			status_string += "\n\n     ===========\n     | D E A D |\n     ===========\n"
 
 		link.set_color(0, 0, 0, 1)
 		status_string = "[%5.2ffps %.2f MiB %.1f%% CPU]\n%s" % (smoothed_fps, os_interface.memory_usage()/(2**20.0), 100 * os_interface.cpu_usage(), status_string)

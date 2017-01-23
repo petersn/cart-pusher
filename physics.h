@@ -30,6 +30,7 @@ public:
 	void setPos(Real x, Real y, Real z);
 	void getAxisAngle(Real* axis_angle);
 	void setAxisAngle(Real x, Real y, Real z, Real t);
+	void setPosAxisAngle(Real xx, Real yy, Real zz, Real x, Real y, Real z, Real t);
 	void getLinearVelocity(Real* xyz);
 	void setLinearVelocity(Real* xyz);
 	void convertIntoReferenceFrame();
@@ -37,6 +38,7 @@ public:
 	void applyCentralImpulse(Real x, Real y, Real z);
 	void setAngularFactor(Real x, Real y, Real z);
 	void setGravity(Real x, Real y, Real z);
+	void setKinematic(bool is_kinematic);
 	void removeFromWorld();
 };
 
@@ -108,6 +110,7 @@ extern "C" EXPORT void PhysicsObject_getPos(PhysicsObject* obj, Real* xyz);
 extern "C" EXPORT void PhysicsObject_setPos(PhysicsObject* obj, Real x, Real y, Real z);
 extern "C" EXPORT void PhysicsObject_getAxisAngle(PhysicsObject* obj, Real* axis_angle);
 extern "C" EXPORT void PhysicsObject_setAxisAngle(PhysicsObject* obj, Real x, Real y, Real z, Real t);
+extern "C" EXPORT void PhysicsObject_setPosAxisAngle(PhysicsObject* obj, Real xx, Real yy, Real zz, Real x, Real y, Real z, Real t);
 extern "C" EXPORT void PhysicsObject_getLinearVelocity(PhysicsObject* obj, Real* xyz);
 extern "C" EXPORT void PhysicsObject_setLinearVelocity(PhysicsObject* obj, Real vx, Real vy, Real vz);
 extern "C" EXPORT void PhysicsObject_convertIntoReferenceFrame(PhysicsObject* obj);
@@ -115,7 +118,7 @@ extern "C" EXPORT void PhysicsObject_applyForce(PhysicsObject* obj, Real x, Real
 extern "C" EXPORT void PhysicsObject_applyCentralImpulse(PhysicsObject* obj, Real x, Real y, Real z);
 extern "C" EXPORT void PhysicsObject_setAngularFactor(PhysicsObject* obj, Real x, Real y, Real z);
 extern "C" EXPORT void PhysicsObject_setGravity(PhysicsObject* obj, Real x, Real y, Real z);
-
+extern "C" EXPORT void PhysicsObject_setKinematic(PhysicsObject* obj, int is_kinematic);
 
 #endif
 

@@ -146,6 +146,7 @@ get("gettimeofday_wrapper", None, [POINTER(c_longlong)], masked=True)
 get("glPushMatrix", None, [], library=opengl_library)
 get("glPopMatrix", None, [], library=opengl_library)
 get("glScalef", None, [c_float, c_float, c_float], library=opengl_library)
+get("glTranslatef", None, [c_float, c_float, c_float], library=opengl_library)
 
 GL_COMPILE = 0x1300
 # Technically all these c_ints are actually GLsizei, but it's typedefed to int in gl.h, so I think this is safe...
@@ -175,6 +176,7 @@ get("PhysicsObject_getPos", None, [PhysicsObjectPointer, POINTER(Real)])
 get("PhysicsObject_setPos", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_getAxisAngle", None, [PhysicsObjectPointer, POINTER(Real)])
 get("PhysicsObject_setAxisAngle", None, [PhysicsObjectPointer, Real, Real, Real, Real])
+get("PhysicsObject_setPosAxisAngle", None, [PhysicsObjectPointer, Real, Real, Real, Real, Real, Real, Real])
 get("PhysicsObject_getLinearVelocity", None, [PhysicsObjectPointer, POINTER(Real)])
 get("PhysicsObject_setLinearVelocity", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_convertIntoReferenceFrame", None, [PhysicsObjectPointer])
@@ -182,6 +184,7 @@ get("PhysicsObject_applyForce", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_applyCentralImpulse", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_setAngularFactor", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_setGravity", None, [PhysicsObjectPointer, Real, Real, Real])
+get("PhysicsObject_setKinematic", None, [PhysicsObjectPointer, c_int])
 
 #get("create_block", PhysicalObjectPointer, [POINTER(c_float), c_int, POINTER(c_float)], masked=True)
 #get("draw_block", None, [POINTER(c_float), c_int, POINTER(c_float)], masked=True)
@@ -286,6 +289,11 @@ class PhysicsObject:
 		x, y, z, t = axis_angle
 		PhysicsObject_setAxisAngle(self.ptr, x, y, z, t)
 
+	def setPosAxisAngle(self, pos, axis_angle):
+		xx, yy, zz = pos
+		x, y, z, t = axis_angle
+		PhysicsObject_setPosAxisAngle(self.ptr, xx, yy, zz, x, y, z, t)
+
 	def getLinearVelocity(self):
 		array = (Real*3)()
 		PhysicsObject_getLinearVelocity(self.ptr, array)
@@ -308,6 +316,9 @@ class PhysicsObject:
 
 	def setGravity(self, x, y, z):
 		PhysicsObject_setGravity(self.ptr, x, y, z)
+
+	def setKinematic(self, is_kinematic):
+		PhysicsObject_setKinematic(self.ptr, int(bool(is_kinematic)))
 
 class Box(PhysicsObject):
 	def __init__(self, parent, texture, bounds, xyz, rotation, mass, collision_group=1):

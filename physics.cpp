@@ -124,6 +124,16 @@ void PhysicsObject::getAxisAngle(Real* axis_angle) {
 void PhysicsObject::setAxisAngle(Real x, Real y, Real z, Real t) {
 	btTransform trans;
 	motionState->getWorldTransform(trans);
+//	trans.setOrigin(btVector3(xx, yy, zz));
+	trans.setRotation(btQuaternion(btVector3(x, y, z), t));
+	motionState->setWorldTransform(trans);
+	rigidBody->setWorldTransform(trans);
+}
+
+void PhysicsObject::setPosAxisAngle(Real xx, Real yy, Real zz, Real x, Real y, Real z, Real t) {
+	btTransform trans;
+	motionState->getWorldTransform(trans);
+	trans.setOrigin(btVector3(xx, yy, zz));
 	trans.setRotation(btQuaternion(btVector3(x, y, z), t));
 	motionState->setWorldTransform(trans);
 	rigidBody->setWorldTransform(trans);
@@ -173,6 +183,15 @@ void PhysicsObject::setAngularFactor(Real x, Real y, Real z) {
 
 void PhysicsObject::setGravity(Real x, Real y, Real z) {
 	rigidBody->setGravity(btVector3(x, y, z));
+}
+
+void PhysicsObject::setKinematic(bool is_kinematic) {
+	auto flags = rigidBody->getCollisionFlags();
+	if (is_kinematic)
+		flags |= btCollisionObject::CF_KINEMATIC_OBJECT;
+	else
+		flags &= ~btCollisionObject::CF_KINEMATIC_OBJECT;
+	rigidBody->setCollisionFlags(flags);
 }
 
 Box::Box(PhysicsWorld* parent, Real* sizes, Real* position, Real* rotation_quaternion, Real mass, int collision_group) {
@@ -400,6 +419,10 @@ extern "C" EXPORT void PhysicsObject_setAxisAngle(PhysicsObject* obj, Real x, Re
 	obj->setAxisAngle(x, y, z, t);
 }
 
+extern "C" EXPORT void PhysicsObject_setPosAxisAngle(PhysicsObject* obj, Real xx, Real yy, Real zz, Real x, Real y, Real z, Real t) {
+	obj->setPosAxisAngle(xx, yy, zz, x, y, z, t);
+}
+
 extern "C" EXPORT void PhysicsObject_getLinearVelocity(PhysicsObject* obj, Real* xyz) {
 	obj->getLinearVelocity(xyz);
 }
@@ -427,5 +450,9 @@ extern "C" EXPORT void PhysicsObject_setAngularFactor(PhysicsObject* obj, Real x
 
 extern "C" EXPORT void PhysicsObject_setGravity(PhysicsObject* obj, Real x, Real y, Real z) {
 	obj->setGravity(x, y, z);
+}
+
+extern "C" EXPORT void PhysicsObject_setKinematic(PhysicsObject* obj, int is_kinematic) {
+	obj->setKinematic(is_kinematic);
 }
 

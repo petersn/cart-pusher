@@ -10,7 +10,7 @@ USE_MOVE_PREDICTION = True
 USE_JITTER_CORRECTION = True
 
 # Server settings.
-SERVER_STATE_FRAMES = 15
+SERVER_STATE_FRAMES = 90
 SERVER_PATCHES_FRAMES = 3
 
 #STATE_COMPRESS = lambda s: s
@@ -18,4 +18,7 @@ SERVER_PATCHES_FRAMES = 3
 
 STATE_COMPRESS = lambda s: s.encode("zlib")
 STATE_DECOMPRESS = lambda s: s.decode("zlib")
+
+# Global values that don't need to be reconfigured ever.
+ENTITY_CREATION_OFFSET = 1000000000
 
