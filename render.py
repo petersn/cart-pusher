@@ -26,7 +26,12 @@ class ModelSubObject:
 		self.name = self.obj.name
 		self.triangles = self.obj.triangles
 		self.triangles_texture_coords = self.obj.triangles_texture_coords
-		self.t = link.Texture(self.metadata.get("textures", {}).get(self.name, "data/stone.png"))
+		# XXX: TODO: FIXME: This is super duper hacky, but for just now...
+		# Rather than fix my addon to properly set relative paths to textures, simply fix up the paths right here.
+		# (Timestamp, so I can be shamed for how long I leave this hack: Mon Jan 23 06:58:15 EST 2017)
+		texture_path = self.metadata.get("textures", {}).get(self.name, "data/stone.png")
+		texture_path = texture_path.replace("/home/snp/proj/cart-pusher/", "./")
+		self.t = link.Texture(texture_path)
 		self.arrays = link.pack_triangles(self.obj.triangles, self.obj.triangles_texture_coords)
 
 	def render(self):
