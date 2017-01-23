@@ -27,6 +27,13 @@ class GameSimulation:
 		self.previous_patch_from_entity = {}
 		self.client_known_ent_ids = set()
 
+		# These are server-side configuration values.
+		self.difficulty = 0
+		self.debug = 0
+
+		# These are game-play critical values.
+		self.current_checkpoint_value = 0
+
 	def step(self, dt):
 		# XXX: Floating point accumulation issues here?
 		self.total_game_time += dt
@@ -136,6 +143,9 @@ class GameSimulation:
 			"vars": {
 				"total_game_time": self.total_game_time,
 				"next_entity_id": self.next_entity_id,
+				# Send server-side configuration.
+				"difficulty": self.difficulty,
+				"debug": self.debug,
 			},
 			"ents": {},
 		}
@@ -184,6 +194,9 @@ class GameSimulation:
 		# It's not like we have Javascript-style __proto__ issues, but...
 		self.total_game_time = (1.0 - self.SERVER_TIME_ALPHA) * self.total_game_time + self.SERVER_TIME_ALPHA * desc["vars"]["total_game_time"]
 		self.next_entity_id = desc["vars"]["next_entity_id"]
+		# Unpack server-side configuration.
+		self.difficulty = desc["vars"]["difficulty"]
+		self.debug = desc["vars"]["debug"]
 		# Mark each entity for culling.
 		for entity in self.entities.itervalues():
 			# By default we cull all entities that aren't client side only.
@@ -305,7 +318,11 @@ class Entity:
 				return player
 
 class EnemyMixin:
-	pass
+	damage_state = 0
+
+	def deal_damage(self, amount):
+		self.hp -= amount
+		self.damage_state = 24
 
 class GeomOnlyPatchMixin:
 	def serialize_patch(self):
@@ -368,6 +385,7 @@ class MapLoader(Entity):
 #		link.glPushMatrix()
 #		self.geom.convertIntoReferenceFrame()
 		# XXX: TODO: Actually take self.xyz into account! 
+		link.set_color(1, 1, 1, 1)
 		self.model.render()
 #		link.glPopMatrix()
 
@@ -405,7 +423,7 @@ class Block(Entity):
 		# XXX: FIXME: For some reason if I set both position AND angle then the object
 		# loses all locally predicted motion, and is basically a streamed animation... :(
 		self.geom.setPos(pos)
-		self.geom.setAxisAngle(axis_angle)
+#		self.geom.setAxisAngle(axis_angle)
 		self.geom.setLinearVelocity(velo)
 		return i + 40
 
@@ -419,11 +437,55 @@ class Block(Entity):
 		link.draw_box(bounds, "data/crate.png")
 		link.glPopMatrix()
 
+class Boulder(Block):
+	serialization_key = "B"
+	mass = 120.0
+	radius = 4.0
+
+	def collision(self, other, dt):
+		# Detect collisions with the player and deal damage, but only server-side.
+		if isinstance(other, Player):
+			other.disable_movement_control()
+			delta_pos = other.get_xyz() - self.get_xyz()
+			delta_pos /= max(0.01, np.linalg.norm(delta_pos))
+			delta_pos *= 10.0 * dt
+#			other.geom.applyForce(delta_pos[0], delta_pos[1], delta_pos[2])
+			velo = other.geom.getLinearVelocity()
+			our_velo = self.geom.getLinearVelocity()
+			delta = np.array(our_velo) - np.array(velo)
+			delta *= dt
+			delta *= 1000.0
+#			other.geom.applyForce(delta[0], delta[1], delta[2])
+			other.geom.setLinearVelocity(our_velo)
+
+	def init(self, xyz):
+#		self.model = render.get_model("block")
+		self.geom = link.Sphere(self.sim.physics, "stone", self.radius, xyz, (1, 0, 0, 0), self.mass)
+		self.duration = 10.0
+
+	def step(self, dt):
+		self.duration -= dt
+		if self.duration <= 0.0 and self.sim.is_server_side:
+			self.destroy()
+
+	def draw(self):
+		obj = self.geom
+		x, y, z = obj.getPos()
+		#t1, t2, t3 = obj.bounds[0]/2.0, obj.bounds[1]/2.0, obj.bounds[2]/2.0
+		t1, t2, t3 = self.radius, self.radius, self.radius
+		link.glPushMatrix()
+		obj.convertIntoReferenceFrame()
+#		bounds = [-t1, +t1, -t2, +t2, -t3, +t3]
+#		link.draw_box(bounds, "data/crate.png")
+		link.set_color(1, 1, 1, 1)
+		render.get_model("boulder").render()
+		link.glPopMatrix()
+
 class Jumper(Entity, GeomOnlyPatchMixin, EnemyMixin):
 	serialization_key = "j"
 	max_aggro_range = 50.0
 	radius = 1.4
-	gl_scale = 1.0
+	gl_scale = 1.2
 	max_hp = 20
 	damage = 40
 	mass = 2.0
@@ -441,13 +503,13 @@ class Jumper(Entity, GeomOnlyPatchMixin, EnemyMixin):
 
 	def serialize_patch(self):
 		base_patch = GeomOnlyPatchMixin.serialize_patch(self)
-		base_patch += struct.pack("<fi", self.jump_cooldown, self.aggro_target)
+		base_patch += struct.pack("<bfi", self.damage_state, self.jump_cooldown, self.aggro_target)
 		return base_patch
 
 	def apply_patch(self, patch, i, jitter=0.0):
 		i = GeomOnlyPatchMixin.apply_patch(self, patch, i, jitter)
-		self.jump_cooldown, self.aggro_target = struct.unpack("<fi", patch[i:i+8])
-		return i + 8
+		self.damage_state, self.jump_cooldown, self.aggro_target = struct.unpack("<bfi", patch[i:i+9])
+		return i + 9
 
 	def step(self, dt):
 		player = self.player_in_los(max_range=self.max_aggro_range)
@@ -463,9 +525,13 @@ class Jumper(Entity, GeomOnlyPatchMixin, EnemyMixin):
 			if self.elevation < 0.4 and self.jump_cooldown == 0.0:
 				self.jump_towards_entity(player)
 
+		# TODO: Think carefully about framerate independence here.
+		if self.damage_state > 0:
+			self.damage_state -= 1
+
 		# Server side maximum lifespan.
 		self.lifespan -= dt
-		if self.lifespan <= 0.0 and self.sim.is_server_side:
+		if (self.lifespan <= 0.0 or self.hp <= 0) and self.sim.is_server_side:
 			self.destroy()
 
 	def jump_towards_entity(self, entity):
@@ -488,6 +554,10 @@ class Jumper(Entity, GeomOnlyPatchMixin, EnemyMixin):
 		link.glPushMatrix()
 		self.geom.convertIntoReferenceFrame()
 		link.glScalef(self.gl_scale, self.gl_scale, self.gl_scale)
+		if self.damage_state % 12 >= 6:
+			link.set_color(0, 0, 0, 1)
+		else:
+			link.set_color(1, 1, 1, 1)
 		render.get_model("jumper").render()
 		link.glPopMatrix()
 
@@ -501,8 +571,8 @@ class Jumper(Entity, GeomOnlyPatchMixin, EnemyMixin):
 class BigJumper(Jumper):
 	serialization_key = "J"
 	max_aggro_range = 50.0
-	radius = 0.7 * 2.0
-	gl_scale = 2.0
+	radius = 1.4 * 1.6
+	gl_scale = 1.2 * 1.6
 	max_hp = 50
 	damage = 55
 	mass = 8.0
@@ -513,7 +583,7 @@ class BigJumper(Jumper):
 
 class EnemySpawner(Entity):
 	serialization_key = "s"
-	max_aggro_range = 40.0
+	max_aggro_range = 80.0
 
 	def init(self, xyz, enemy_type, interval):
 		self.xyz = xyz
@@ -530,7 +600,8 @@ class EnemySpawner(Entity):
 		if self.spawn_cooldown == 0.0 and self.player_in_los(max_range=self.max_aggro_range):
 			# Only spawn enemies on the server side.
 			if self.sim.is_server_side:
-				self.sim.add_entity(serialization_key_table[self.enemy_type], [self.xyz])
+				if self.sim.difficulty > 0:
+					self.sim.add_entity(serialization_key_table[self.enemy_type], [self.xyz])
 				self.spawn_cooldown = self.interval
 
 class RandomlyGeneratedTerrain(TerrainSegment):
@@ -555,7 +626,7 @@ class RandomlyGeneratedTerrain(TerrainSegment):
 class Cart(GeomOnlyPatchMixin, Entity):
 	serialization_key = "c"
 	mass = 1000.0
-	cart_speed = 5.0
+	cart_speed = 1.5
 	contest_distance = 8.0
 
 	def init(self, xyz):
@@ -580,6 +651,7 @@ class Cart(GeomOnlyPatchMixin, Entity):
 	def draw(self):
 		link.glPushMatrix()
 		self.geom.convertIntoReferenceFrame()
+		link.set_color(1, 1, 1, 1)
 		render.get_model("cart").render()
 		link.glPopMatrix()
 
@@ -609,6 +681,8 @@ class Cart(GeomOnlyPatchMixin, Entity):
 				self.push_state = "contested"
 				break
 		multiplier = {"idle": 0, "pushing": 1, "contested": 0}[self.push_state]
+		if self.sim.debug:
+			multiplier *= 10.0
 		self.current_speed = multiplier * self.cart_speed
 		self.accumulated_movement += self.current_speed * dt
 		#self.geom.setLinearVelocity((multiplier * self.cart_speed, 0, 0))
@@ -641,7 +715,7 @@ class Effect:
 class Explosion(Effect):
 	def init(self, xyz):
 		self.xyz = np.array(xyz)
-		self.duration = 1.0
+		self.duration = 0.5
 
 	def step(self, dt):
 		self.duration -= dt
@@ -649,8 +723,8 @@ class Explosion(Effect):
 			self.destroy()
 
 	def draw(self):
-		lower = - np.array([1, 1, 1]) * self.duration
-		upper = + np.array([1, 1, 1]) * self.duration
+		lower = - np.array([1, 1, 1]) * self.duration * 2.0
+		upper = + np.array([1, 1, 1]) * self.duration * 2.0
 		link.glPushMatrix()
 		link.glTranslatef(*self.xyz)
 		link.draw_box([lower[0], upper[0], lower[1], upper[1], lower[2], upper[2]], "data/lava_n4pgamer.png")
@@ -658,7 +732,7 @@ class Explosion(Effect):
 
 class Bullet(Effect):
 	velocity = 100.0
-	total_range = 1000.0
+	total_range = 200.0
 	client_side_only_entity = True
 
 	def init(self, xyz, facing, tilt):
@@ -699,9 +773,7 @@ class Bullet(Effect):
 				hit_entity = self.sim.get_ent(lambda e: getattr(e, "geom", None) == hit.hit_object)
 				if isinstance(hit_entity, EnemyMixin):
 					if self.sim.is_server_side:
-						hit_entity.destroy()
-					else:
-						print "NOT DESTROYING:", hit_entity
+						hit_entity.deal_damage(12)
 				self.xyz = hit.xyz
 				self.end_bullet_path()
 				return
@@ -726,7 +798,7 @@ class RespawnHandle(Entity):
 	respawn_time = 6.0
 
 	def init(self, name, player_ent_id):
-		print "CREATING RESPAWN HANDLE:", name, player_ent_id
+#		print "CREATING RESPAWN HANDLE:", name, player_ent_id
 		self.name, self.player_ent_id = name, player_ent_id
 		self.respawn_cooldown = self.respawn_time
 
@@ -744,7 +816,7 @@ class RespawnHandle(Entity):
 
 class Player(GeomOnlyPatchMixin, Entity):
 	serialization_key = "p"
-	move_speed = 10.0
+	move_speed = 6.0
 	move_stiffness = 15.0 * 60.0
 	jump_velocity = 8.0
 	jump_count = 1
@@ -774,6 +846,7 @@ class Player(GeomOnlyPatchMixin, Entity):
 		self.shoot_cooldown = 0.0
 		self.reload_cooldown = 0.0
 		self.health_regen_cooldown = 0.0
+		self.movement_cooldown = 0.0
 #		self.player_class_state = characters.BasicCharacter()
 
 #	def init_from_state(self, desc):
@@ -824,6 +897,7 @@ class Player(GeomOnlyPatchMixin, Entity):
 			return
 		link.glPushMatrix()
 		self.geom.convertIntoReferenceFrame()
+		link.set_color(1, 1, 1, 1)
 		render.get_model("player_model").render()
 		link.glPopMatrix()
 
@@ -831,11 +905,14 @@ class Player(GeomOnlyPatchMixin, Entity):
 		self.hp -= amount
 		self.health_regen_cooldown = self.health_regen_interval
 
+	def disable_movement_control(self):
+		self.movement_cooldown = 0.3
+
 	def step(self, dt):
 		# XXX: Not framerate independent yet!
 		self.apply_forces(dt)
 		self.elevation = self.get_elevation(collision_mask=COLLISION_SOLID | COLLISION_ENEMY, corrections=self.radius)
-		if self.elevation < 0.4 or True:
+		if self.elevation < 0.4 or self.sim.debug:
 			self.jumps_available = self.jump_count
 		else:
 			# Prevent the player from getting two full jumps if they walk off an edge.
@@ -844,13 +921,15 @@ class Player(GeomOnlyPatchMixin, Entity):
 		self.shoot_cooldown = max(0.0, self.shoot_cooldown - dt)
 		self.reload_cooldown = max(0.0, self.reload_cooldown - dt)
 		self.health_regen_cooldown = max(0.0, self.health_regen_cooldown - dt)
+		self.movement_cooldown = max(0.0, self.movement_cooldown - dt)
 		if self.ammo == 0 and self.reload_cooldown == 0.0:
 			self.ammo = self.max_ammo
 		if self.hp < self.max_hp and self.health_regen_cooldown == 0.0:
 			self.hp = min(self.max_hp, self.hp + dt * self.health_regen_rate)
 
 		# On the server we kill players if they reach zero or less HP.
-		if self.hp <= 0.0 and self.sim.is_server_side:
+		# Further, kill the player if they fall below the plane z = -20.
+		if (self.hp <= 0.0 or self.get_xyz()[2] < -20.0) and self.sim.is_server_side:
 			self.kill_the_player()
 
 	def kill_the_player(self):
@@ -861,9 +940,15 @@ class Player(GeomOnlyPatchMixin, Entity):
 
 	def respawn(self):
 		# Respawn over the cart.
-		cart = self.sim.get_ent(lambda ent: isinstance(ent, Cart))
-		self.geom.setPos(cart.get_xyz() + np.array([0, 0, 2]))
-#		self.geom.setPos(np.array([0, 0, 2]))
+#		cart = self.sim.get_ent(lambda ent: isinstance(ent, Cart))
+		map_loader = self.sim.get_ent(lambda x: isinstance(x, MapLoader))
+		for location_name, xyz in map_loader.model.w.metadata["marker_locations"].iteritems():
+			if location_name == "M_Spawn%i" % self.sim.current_checkpoint_value:
+				print "Using location", location_name, "at", xyz
+				self.geom.setPos(xyz)
+				break
+		else:
+			print "ERROR! No spawn location for checkpoint value %i." % self.sim.current_checkpoint_value
 		self.geom.setLinearVelocity((0, 0, 0))
 
 	def try_to_jump(self):
@@ -886,7 +971,6 @@ class Player(GeomOnlyPatchMixin, Entity):
 				self.reload_cooldown = self.reload_interval
 			# Shoot, but only for the client.
 			self.sim.add_effect(Bullet, [self.get_xyz(), self.facing, self.tilt])
-			self.deal_damage(25)
 
 	def try_to_command(self, command):
 		if command == "jump":
@@ -920,10 +1004,14 @@ class Player(GeomOnlyPatchMixin, Entity):
 	def apply_forces(self, dt):
 		x, y = self.get_motion_xy()
 		vel = self.geom.getLinearVelocity()
+		if self.sim.debug:
+			x *= 1.5
+			y *= 1.5
 		# WARNING: The value 10000 is the maximum height we can be over terrain before the ray is missed!
 		MAX_ELEVATION = 10000
 		dx, dy = self.move_speed*x - vel[0], self.move_speed*y - vel[1]
-		self.geom.applyForce(self.move_stiffness * dx * dt, self.move_stiffness * dy * dt, 0)
+		if self.movement_cooldown == 0.0:
+			self.geom.applyForce(self.move_stiffness * dx * dt, self.move_stiffness * dy * dt, 0)
 
 serialization_key_table = {}
 for cls in globals().values():

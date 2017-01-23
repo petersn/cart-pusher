@@ -223,16 +223,18 @@ def main(game_options):
 		if player:
 			status_string += "HP: %3i/100\n" % player.hp
 			status_string += "Ammo: %2s/%s" % (player.ammo, player.max_ammo)
-			status_string += " [%2i]" % player.ammo_claim_patches
+#			status_string += " [%2i]" % player.ammo_claim_patches
 			if player.reload_cooldown > 0.0:
 				status_string += " [%-20s]\n" % ("*" * int(20.0 * player.reload_cooldown / player.reload_interval),)
 			else:
 				status_string += "\n"
 		else:
-			status_string += "\n\n     ===========\n     | D E A D |\n     ===========\n"
+			respawn_handle = sim.get_ent(lambda x: isinstance(x, simulation.RespawnHandle) and x.player_ent_id == my_player_ent_id)
+			if respawn_handle:
+				link.draw_centered_text("===========\n| D E A D |\n===========\n" + " Time: %.1f" % max(0.0, respawn_handle.respawn_cooldown))
 
 		link.set_color(0, 0, 0, 1)
-		status_string = "[%5.2ffps %.2f MiB %.1f%% CPU]\n%s" % (smoothed_fps, os_interface.memory_usage()/(2**20.0), 100 * os_interface.cpu_usage(), status_string)
+#		status_string = "[%5.2f fps %.2f MiB %.1f%% CPU]\n%s" % (smoothed_fps, os_interface.memory_usage()/(2**20.0), 100 * os_interface.cpu_usage(), status_string)
 		link.draw_bordered_text((10, 10), status_string)
 		link.end_frame()
 

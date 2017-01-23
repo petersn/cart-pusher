@@ -96,18 +96,28 @@ extern "C" EXPORT void end_frame() {
 }
 
 extern "C" EXPORT float get_text_width(char* text, float height) {
-	float x = 0;
+	float lines_max = 0;
+	float line_accum = 0;
 	while (*text) {
+		if (*text == 10) {
+			if (line_accum > lines_max)
+				lines_max = line_accum;
+			line_accum = 0;
+			text++;
+			continue;
+		}
 		if (font_map[*text] == -1) {
 			text++;
 			continue;
 		}
 		float width_to_height = font_width[*text] / (float) font_height[*text];
 		float width = height * width_to_height;
-		x += width;
+		line_accum += width;
 		text++;
 	}
-	return x;
+	if (line_accum > lines_max)
+		lines_max = line_accum;
+	return lines_max;
 }
 
 extern "C" EXPORT void draw_with_font(char* text, float x, float y, float height) {

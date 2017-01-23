@@ -206,15 +206,16 @@ def draw_bordered_text(xy, text, font_size=30, color=(1, 1, 1, 1)):
 	draw_with_font(text, xy[0], xy[1], font_size)
 	return get_text_width(text, font_size)
 
-def draw_centered_text(text, font_size=50):
+def draw_centered_text(text, font_size=50, color=(1, 1, 1, 1)):
+	line_count = 1 + text.count("\n")
 	width = get_text_width(text, font_size)
 	x = screen_width.value / 2 - width / 2
-	y = screen_height.value / 2 - font_size / 2
+	y = screen_height.value / 2 - (line_count * font_size) / 2
 	set_color(0, 0, 0, 1)
 	# Make a dark outline.
 	draw_with_font(text, x-1, y-1, font_size)
 	draw_with_font(text, x+1, y+1, font_size)
-	set_color(1, 1, 1, 1)
+	set_color(*color)
 	draw_with_font(text, x, y, font_size)
 
 # Masked routines.
