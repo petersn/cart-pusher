@@ -6,7 +6,6 @@ import numpy as np
 import compgeom
 import link
 import render
-import characters
 from config import *
 
 COLLISION_SOLID  = 1 << 0
