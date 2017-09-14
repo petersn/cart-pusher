@@ -175,6 +175,7 @@ get("PhysicsObject_getPos", None, [PhysicsObjectPointer, POINTER(Real)])
 get("PhysicsObject_setPos", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_getAxisAngle", None, [PhysicsObjectPointer, POINTER(Real)])
 get("PhysicsObject_setAxisAngle", None, [PhysicsObjectPointer, Real, Real, Real, Real])
+get("PhysicsObject_setPosAxisAngle", None, [PhysicsObjectPointer, Real, Real, Real, Real, Real, Real, Real])
 get("PhysicsObject_getLinearVelocity", None, [PhysicsObjectPointer, POINTER(Real)])
 get("PhysicsObject_setLinearVelocity", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_convertIntoReferenceFrame", None, [PhysicsObjectPointer])
@@ -285,6 +286,11 @@ class PhysicsObject:
 	def setAxisAngle(self, axis_angle):
 		x, y, z, t = axis_angle
 		PhysicsObject_setAxisAngle(self.ptr, x, y, z, t)
+
+	def setPosAxisAngle(self, pos, axis_angle):
+		xx, yy, zz = pos
+		x, y, z, t = axis_angle
+		PhysicsObject_setPosAxisAngle(self.ptr, xx, yy, zz, x, y, z, t)
 
 	def getLinearVelocity(self):
 		array = (Real*3)()

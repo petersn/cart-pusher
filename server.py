@@ -68,8 +68,9 @@ class GameManager:
 		simulation.initialize_game(self.sim)
 
 	def introduce_player(self, data):
-		player = self.sim.add_entity(simulation.Player, [(0, 0, -100), data["name"]])
-		player.respawn()
+		with global_lock:
+			player = self.sim.add_entity(simulation.Player, [(0, 0, -100), data["name"]])
+			player.respawn()
 		return player.ent_id
 
 	def server_side_ticks_thread(self):
@@ -106,11 +107,12 @@ class GameManager:
 					valid_player_ent_ids = set(handler.entity_id for handler in global_player_handlers)
 					self.sim.entities = {k: v for k, v in self.sim.entities.iteritems() if (not isinstance(v, simulation.Player)) or k in valid_player_ent_ids}
 				# Every so often broadcast the entire game state.
-				sim_state = self.sim.serialize_game_state()
+					sim_state = self.sim.serialize_game_state()
 				broadcast_message("s", sim_state)
 			elif self.tick_count % SERVER_PATCHES_FRAMES == 0:
-				# Pretty much every tick transmit patches 
-				sim_state = self.sim.serialize_game_patches()
+				# Pretty much every tick transmit patches.
+				with global_lock:
+					sim_state = self.sim.serialize_game_patches()
 				broadcast_message("e", sim_state)
 
 			begin_sleep_time = link.gettimeofday_wrapper()

@@ -19,23 +19,41 @@ for dirpath, dirnames, filenames in os.walk("models"):
 
 model_cache = {}
 
+class ModelSubObject:
+	def __init__(self, obj, metadata):
+		self.obj, self.metadata = obj, metadata
+		# TODO: When I work on distributing this, make sure the paths work out appropriately here.
+		self.name = self.obj.name
+		self.triangles = self.obj.triangles
+		self.triangles_texture_coords = self.obj.triangles_texture_coords
+		self.t = link.Texture(self.metadata.get("textures", {}).get(self.name, "data/stone.png"))
+		self.arrays = link.pack_triangles(self.obj.triangles, self.obj.triangles_texture_coords)
+
+	def render(self):
+		link.draw_triangles(self.arrays, self.t.index)
+
 class Model:
 	def __init__(self, name, obj_path, texture_path=None):
 		self.name, self.obj_path, self.texture_path = name, obj_path, texture_path
 		self.w = wavefront_importer.Wavefront()
 		self.w.load(self.obj_path)
-		self.t = link.get_texture(os.path.join("data", "stone.png"))
-		if texture_path != None:
-			self.t = link.Texture(self.texture_path)
-			print "Model", name, "using texture:", self.t.index
-		else:
-			print "Model", name, "using default texture:", self.t.index
-		# Pack triangles into arrays for fast rendering.
-		self.obj = self.w.objects[0]
-		self.arrays = link.pack_triangles(self.obj.triangles, self.obj.triangles_texture_coords)
+#		self.t = link.get_texture(os.path.join("data", "stone.png"))
+#		if texture_path != None:
+#			self.t = link.Texture(self.texture_path)
+#			print "Model", name, "using texture:", self.t.index
+#		else:
+#			print "Model", name, "using default texture:", self.t.index
+#		# Pack triangles into arrays for fast rendering.
+#		self.obj = self.w.objects[0]
+#		self.arrays = link.pack_triangles(self.obj.triangles, self.obj.triangles_texture_coords)
+		self.sub_objects = [ModelSubObject(obj, self.w.metadata) for obj in self.w.objects]
+		# XXX: Obnoxious legacy. Refactor this.
+		self.obj = self.sub_objects[0]
 
 	def render(self):
-		link.draw_triangles(self.arrays, self.t.index)
+		for obj in self.sub_objects:
+			obj.render()
+		#link.draw_triangles(self.arrays, self.t.index)
 
 def get_model(model_name):
 	if model_name not in model_cache:

@@ -23,6 +23,7 @@ class GameSimulation:
 		self.next_entity_id = 1000
 		self.server_time_delta_estimate = None
 		self.is_server_side = is_server_side
+		self.previous_patch_from_entity = {}
 
 	def step(self, dt):
 		# XXX: Floating point accumulation issues here?
@@ -126,8 +127,12 @@ class GameSimulation:
 		now = time.time()
 		s = [struct.pack("<d", now)]
 		for entity in self.entities.itervalues():
+			new_patch = entity.serialize_patch()
+			if new_patch == self.previous_patch_from_entity.get(entity.ent_id, None):
+				continue
+			self.previous_patch_from_entity[entity.ent_id] = new_patch
 			s.append(struct.pack("<I", entity.ent_id))
-			s.append(entity.serialize_patch())
+			s.append(new_patch)
 		return "".join(s)
 
 	def apply_serialized_state(self, desc):
@@ -172,8 +177,10 @@ class GameSimulation:
 		jitter = server_time - now - self.server_time_delta_estimate
 		self.server_time_delta_estimate = (1 - self.SERVER_TIME_ALPHA) * self.server_time_delta_estimate + self.SERVER_TIME_ALPHA * (server_time - now)
 		i = 8
+		applied_ents = []
 		while i < len(payload):
 			ent_id, = struct.unpack("<I", payload[i:i+4])
+			applied_ents.append(ent_id)
 			i += 4
 			# If we haven't heard of this object then create it.
 			if ent_id not in self.entities:
@@ -184,6 +191,12 @@ class GameSimulation:
 #				self.entities[ent_id] = serialization_key_table[ent_type]()
 			# Apply our patch, and update the counter.
 			i = self.entities[ent_id].apply_patch(payload, i, jitter)
+		global STATIC_COUNTER
+		STATIC_COUNTER += 1
+		if STATIC_COUNTER % 10 == 0 and False:
+			print "Entities applied to:", applied_ents
+
+STATIC_COUNTER = 0
 
 class Entity:
 	# Set this as a backup so that objects created as children of an object in an initialization routine don't get culled.
@@ -244,12 +257,12 @@ class GeomOnlyPatchMixin:
 		self.geom.setLinearVelocity(velo)
 		return i + 24
 
-class TerrainSegment(Entity):
-	serialization_key = "t"
+class MapLoader(Entity):
+	serialization_key = "M"
 
 	def init(self, xyz, segment_type):
+		self.xyz = xyz
 		self.model = render.get_model(segment_type)
-		self.geom = link.BvhTriangleMesh(self.sim.physics, "stone", self.model.obj.triangles, self.model.obj.triangles_texture_coords, xyz, (1, 0, 0, 0))
 
 		# Extract Bezier curves from the renderer model.
 		self.curves = {}
@@ -260,6 +273,9 @@ class TerrainSegment(Entity):
 		# but instead just wait for the state update to give them to us. So return here.
 		if not self.sim.is_server_side:
 			return
+
+		for i in xrange(len(self.model.sub_objects)):
+			self.sim.add_entity(TerrainSegment, [xyz, segment_type, i])
 
 		# Spawn appropriate entities based on the map's metadata.
 		for entity_desc in self.model.w.metadata["entities"]:
@@ -281,11 +297,23 @@ class TerrainSegment(Entity):
 			else:
 				raise ValueError("Unknown entity type: %r" % (thing,))
 
+	def get_xyz(self):
+		return self.xyz
+
 	def draw(self):
-		link.glPushMatrix()
-		self.geom.convertIntoReferenceFrame()
+#		link.glPushMatrix()
+#		self.geom.convertIntoReferenceFrame()
+		# XXX: TODO: Actually take self.xyz into account! 
 		self.model.render()
-		link.glPopMatrix()
+#		link.glPopMatrix()
+
+class TerrainSegment(Entity):
+	serialization_key = "t"
+
+	def init(self, xyz, segment_type, object_index):
+		self.model = render.get_model(segment_type)
+		self.object_index = object_index
+		self.geom = link.BvhTriangleMesh(self.sim.physics, "stone", self.model.sub_objects[object_index].triangles, self.model.sub_objects[object_index].triangles_texture_coords, xyz, (1, 0, 0, 0))
 
 class Block(Entity):
 	serialization_key = "b"
@@ -310,9 +338,11 @@ class Block(Entity):
 		if USE_JITTER_CORRECTION:
 			pos = np.array(pos) - np.array(velo) * jitter
 			# TODO: Once the angular velocity is encoded, also jitter correct axis_angle here.
+		# XXX: FIXME: For some reason if I set both position AND angle then the object
+		# loses all locally predicted motion, and is basically a streamed animation... :(
 		self.geom.setPos(pos)
-		self.geom.setLinearVelocity(velo)
 		self.geom.setAxisAngle(axis_angle)
+		self.geom.setLinearVelocity(velo)
 		return i + 40
 
 	def draw(self):
@@ -520,7 +550,7 @@ class Cart(GeomOnlyPatchMixin, Entity):
 			new_xyz, new_theta = level_gen.get_xyz_theta_on_path(self.accumulated_movement)
 		else:
 			# Otherwise, look for a terrain segment with a Bezier curve.
-			level_gen = self.sim.get_ent(lambda x: isinstance(x, TerrainSegment))
+			level_gen = self.sim.get_ent(lambda x: isinstance(x, MapLoader))
 			curve = next(level_gen.curves.itervalues())
 			new_xyz = curve.get_point_by_distance(self.accumulated_movement)
 			new_theta = 0.0
@@ -594,7 +624,7 @@ class Player(GeomOnlyPatchMixin, Entity):
 		# XXX: Not framerate independent yet!
 		self.apply_forces(dt)
 		self.elevation = self.get_elevation(collision_mask=COLLISION_SOLID | COLLISION_ENEMY, corrections=self.radius)
-		if self.elevation < 0.4:
+		if self.elevation < 0.4 or True:
 			self.jumps_available = self.jump_count
 		else:
 			# Prevent the player from getting two full jumps if they walk off an edge.
@@ -664,9 +694,9 @@ def initialize_game(sim):
 	sim.add_entity(Cart, [(0, 0, 1.0)])
 #	sim.add_entity(EnemySpawner, [(20, 0, 2), "j", 5.0])
 #	sim.add_entity(BigJumper, [(21, 1, 10)])
-#	for i in xrange(50):
-#		sim.add_entity(Jumper, [(20.0 + i * 0.05, i * 0.05, 1.0 + i * 2.0)])
+	for i in xrange(50):
+		sim.add_entity(Block, [(20.0 + i * 0.05, i * 0.05, 1.0 + i * 2.0)])
 
-	sim.add_entity(TerrainSegment, [(0, 0, 0), "trivial_test"])
+	sim.add_entity(MapLoader, [(0, 0, 0), "map1"])
 #	sim.add_entity(RandomlyGeneratedTerrain, [(0, 0, 0), 10])
 

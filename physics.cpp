@@ -124,6 +124,16 @@ void PhysicsObject::getAxisAngle(Real* axis_angle) {
 void PhysicsObject::setAxisAngle(Real x, Real y, Real z, Real t) {
 	btTransform trans;
 	motionState->getWorldTransform(trans);
+//	trans.setOrigin(btVector3(xx, yy, zz));
+	trans.setRotation(btQuaternion(btVector3(x, y, z), t));
+	motionState->setWorldTransform(trans);
+	rigidBody->setWorldTransform(trans);
+}
+
+void PhysicsObject::setPosAxisAngle(Real xx, Real yy, Real zz, Real x, Real y, Real z, Real t) {
+	btTransform trans;
+	motionState->getWorldTransform(trans);
+	trans.setOrigin(btVector3(xx, yy, zz));
 	trans.setRotation(btQuaternion(btVector3(x, y, z), t));
 	motionState->setWorldTransform(trans);
 	rigidBody->setWorldTransform(trans);
@@ -398,6 +408,10 @@ extern "C" EXPORT void PhysicsObject_getAxisAngle(PhysicsObject* obj, Real* axis
 
 extern "C" EXPORT void PhysicsObject_setAxisAngle(PhysicsObject* obj, Real x, Real y, Real z, Real t) {
 	obj->setAxisAngle(x, y, z, t);
+}
+
+extern "C" EXPORT void PhysicsObject_setPosAxisAngle(PhysicsObject* obj, Real xx, Real yy, Real zz, Real x, Real y, Real z, Real t) {
+	obj->setPosAxisAngle(xx, yy, zz, x, y, z, t);
 }
 
 extern "C" EXPORT void PhysicsObject_getLinearVelocity(PhysicsObject* obj, Real* xyz) {
