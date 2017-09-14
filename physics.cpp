@@ -185,6 +185,15 @@ void PhysicsObject::setGravity(Real x, Real y, Real z) {
 	rigidBody->setGravity(btVector3(x, y, z));
 }
 
+void PhysicsObject::setKinematic(bool is_kinematic) {
+	auto flags = rigidBody->getCollisionFlags();
+	if (is_kinematic)
+		flags |= btCollisionObject::CF_KINEMATIC_OBJECT;
+	else
+		flags &= ~btCollisionObject::CF_KINEMATIC_OBJECT;
+	rigidBody->setCollisionFlags(flags);
+}
+
 Box::Box(PhysicsWorld* parent, Real* sizes, Real* position, Real* rotation_quaternion, Real mass, int collision_group) {
 	this->parent = parent;
 	// Here we use the convention that sizes are the total thicknesses, but Bullet uses half-extents.
@@ -441,5 +450,9 @@ extern "C" EXPORT void PhysicsObject_setAngularFactor(PhysicsObject* obj, Real x
 
 extern "C" EXPORT void PhysicsObject_setGravity(PhysicsObject* obj, Real x, Real y, Real z) {
 	obj->setGravity(x, y, z);
+}
+
+extern "C" EXPORT void PhysicsObject_setKinematic(PhysicsObject* obj, int is_kinematic) {
+	obj->setKinematic(is_kinematic);
 }
 

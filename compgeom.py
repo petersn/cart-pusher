@@ -252,3 +252,7 @@ class Bezier:
 		# TODO: Actually smooth out the speed!
 		return get_point_on_curve(self.bezier, t)
 
+	def get_derivative_by_distance(self, d):
+		t = d / self.arc_length
+		return get_curve_derivative(self.bezier, t)
+

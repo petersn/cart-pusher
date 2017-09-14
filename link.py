@@ -146,6 +146,7 @@ get("gettimeofday_wrapper", None, [POINTER(c_longlong)], masked=True)
 get("glPushMatrix", None, [], library=opengl_library)
 get("glPopMatrix", None, [], library=opengl_library)
 get("glScalef", None, [c_float, c_float, c_float], library=opengl_library)
+get("glTranslatef", None, [c_float, c_float, c_float], library=opengl_library)
 
 GL_COMPILE = 0x1300
 # Technically all these c_ints are actually GLsizei, but it's typedefed to int in gl.h, so I think this is safe...
@@ -183,6 +184,7 @@ get("PhysicsObject_applyForce", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_applyCentralImpulse", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_setAngularFactor", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_setGravity", None, [PhysicsObjectPointer, Real, Real, Real])
+get("PhysicsObject_setKinematic", None, [PhysicsObjectPointer, c_int])
 
 #get("create_block", PhysicalObjectPointer, [POINTER(c_float), c_int, POINTER(c_float)], masked=True)
 #get("draw_block", None, [POINTER(c_float), c_int, POINTER(c_float)], masked=True)
@@ -204,15 +206,16 @@ def draw_bordered_text(xy, text, font_size=30, color=(1, 1, 1, 1)):
 	draw_with_font(text, xy[0], xy[1], font_size)
 	return get_text_width(text, font_size)
 
-def draw_centered_text(text, font_size=50):
+def draw_centered_text(text, font_size=50, color=(1, 1, 1, 1)):
+	line_count = 1 + text.count("\n")
 	width = get_text_width(text, font_size)
 	x = screen_width.value / 2 - width / 2
-	y = screen_height.value / 2 - font_size / 2
+	y = screen_height.value / 2 - (line_count * font_size) / 2
 	set_color(0, 0, 0, 1)
 	# Make a dark outline.
 	draw_with_font(text, x-1, y-1, font_size)
 	draw_with_font(text, x+1, y+1, font_size)
-	set_color(1, 1, 1, 1)
+	set_color(*color)
 	draw_with_font(text, x, y, font_size)
 
 # Masked routines.
@@ -314,6 +317,9 @@ class PhysicsObject:
 
 	def setGravity(self, x, y, z):
 		PhysicsObject_setGravity(self.ptr, x, y, z)
+
+	def setKinematic(self, is_kinematic):
+		PhysicsObject_setKinematic(self.ptr, int(bool(is_kinematic)))
 
 class Box(PhysicsObject):
 	def __init__(self, parent, texture, bounds, xyz, rotation, mass, collision_group=1):

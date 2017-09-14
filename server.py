@@ -59,8 +59,10 @@ def broadcast_message(message_type, string):
 class GameManager:
 	max_ticks_per_second = 60
 
-	def __init__(self):
+	def __init__(self, args):
 		self.sim = simulation.GameSimulation(is_server_side=True)
+		self.sim.difficulty = args.difficulty
+		self.sim.debug = args.debug
 		self.input_queue = Queue.Queue()
 		self.tick_count = 0
 
@@ -81,12 +83,15 @@ class GameManager:
 			try:
 				while True:
 					inp = self.input_queue.get_nowait()
+					if inp["player_ent_id"] not in self.sim.entities:
+						print "Bad input for player:", inp["player_ent_id"]
+						continue
 					player_entity = self.sim.entities[inp["player_ent_id"]]
 					player_entity.input_motion_vector = inp["motion_vector"]
 					player_entity.facing = inp["facing"]
 					player_entity.tilt = inp["tilt"]
-					if inp["did_jump"]:
-						player_entity.try_to_jump()
+					for command in inp["commands"]:
+						player_entity.try_to_command(command)
 #					print "Got input:", inp
 			except Queue.Empty:
 				pass
@@ -175,9 +180,15 @@ class Handler(SocketServer.StreamRequestHandler):
 				self.keep_going = False
 
 if __name__ == "__main__":
+	import argparse
+	parser = argparse.ArgumentParser(prog="server.py", description="cart-pusher")
+	parser.add_argument("--difficulty", type=int, default=10, help="Difficulty of the game.")
+	parser.add_argument("--debug", action="store_const", const=True, default=False, help="Turn on debug mobility.")
+	args = parser.parse_args()
+
 	print "=== cart-pusher game server ==="
 	print "Running on port %s" % PORT
-	game = GameManager()
+	game = GameManager(args)
 	# Launch a thread that continuously runs the game simulation.
 	thread.start_new_thread(global_data_stats_thread, ())
 	thread.start_new_thread(game.server_side_ticks_thread, ())

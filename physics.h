@@ -38,6 +38,7 @@ public:
 	void applyCentralImpulse(Real x, Real y, Real z);
 	void setAngularFactor(Real x, Real y, Real z);
 	void setGravity(Real x, Real y, Real z);
+	void setKinematic(bool is_kinematic);
 	void removeFromWorld();
 };
 
@@ -117,7 +118,7 @@ extern "C" EXPORT void PhysicsObject_applyForce(PhysicsObject* obj, Real x, Real
 extern "C" EXPORT void PhysicsObject_applyCentralImpulse(PhysicsObject* obj, Real x, Real y, Real z);
 extern "C" EXPORT void PhysicsObject_setAngularFactor(PhysicsObject* obj, Real x, Real y, Real z);
 extern "C" EXPORT void PhysicsObject_setGravity(PhysicsObject* obj, Real x, Real y, Real z);
-
+extern "C" EXPORT void PhysicsObject_setKinematic(PhysicsObject* obj, int is_kinematic);
 
 #endif
 

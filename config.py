@@ -19,3 +19,6 @@ SERVER_PATCHES_FRAMES = 3
 STATE_COMPRESS = lambda s: s.encode("zlib")
 STATE_DECOMPRESS = lambda s: s.decode("zlib")
 
+# Global values that don't need to be reconfigured ever.
+ENTITY_CREATION_OFFSET = 1000000000
+

@@ -1,0 +1,9 @@
+{
+  "doors": {},
+  "mesh_properties": {},
+  "textures": {
+    "Cone": "/home/snp/proj/cart-pusher/models/enemies/jumper/JumperTexture.png"
+  },
+  "marker_locations": {},
+  "entities": []
+}
