@@ -758,7 +758,7 @@ class Bullet(Effect):
 		max_movement_distance = min(self.total_range - self.total_movement, self.velocity * dt)
 		target_point = self.xyz + max_movement_distance * self.direction
 		# Cast a ray towards the target destination.
-		hit = self.sim.physics.rayCast(self.xyz, target_point, COLLISION_SOLID | COLLISION_ENEMY)
+		hit = self.sim.physics.rayCast(self.xyz, target_point, COLLISION_SOLID | COLLISION_ENEMY | COLLISION_PLAYER)
 		if not hit:
 			# On no hit we move the full distance.
 			movement = max_movement_distance
@@ -770,7 +770,7 @@ class Bullet(Effect):
 			else:
 				# We hit something close!
 				hit_entity = self.sim.get_ent(lambda e: getattr(e, "geom", None) == hit.hit_object)
-				if isinstance(hit_entity, EnemyMixin):
+				if isinstance(hit_entity, EnemyMixin) or isinstance(hit_entity, Player):
 					if self.sim.is_server_side:
 						hit_entity.deal_damage(12)
 				self.xyz = hit.xyz
