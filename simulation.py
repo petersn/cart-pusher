@@ -102,6 +102,12 @@ class GameSimulation:
 
 	def remove_entity(self, ent_id):
 		if ent_id in self.entities:
+			# Delete the entity's geom, if it was present.
+			ent = self.entities[ent_id]
+			if hasattr(ent, "geom"):
+				print "\t\t\tRemoving geom."
+				ent.geom.removeFromWorld()
+				ent.geom = None
 			self.entities.pop(ent_id)
 
 	def remove_effect(self, effect):

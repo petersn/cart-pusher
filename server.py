@@ -110,8 +110,10 @@ class GameManager:
 				# Cull players who have quit.
 				with global_lock:
 					valid_player_ent_ids = set(handler.entity_id for handler in global_player_handlers)
-					self.sim.entities = {k: v for k, v in self.sim.entities.iteritems() if (not isinstance(v, simulation.Player)) or k in valid_player_ent_ids}
-				# Every so often broadcast the entire game state.
+					for ent_id, ent in self.sim.entities.items():
+						if isinstance(ent, simulation.Player) and ent_id not in valid_player_ent_ids:
+							self.sim.remove_entity(ent_id)
+					# Every so often broadcast the entire game state.
 					sim_state = self.sim.serialize_game_state()
 				broadcast_message("s", sim_state)
 			elif self.tick_count % SERVER_PATCHES_FRAMES == 0:
