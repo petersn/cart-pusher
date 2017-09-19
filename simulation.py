@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # Game simulation for both clients and the server for cart-pusher.
 
-import os, math, struct, json, base64, time
+import os, math, struct, json, base64, time, random
 import numpy as np
 import compgeom
 import link
@@ -122,7 +122,7 @@ class GameSimulation:
 	def add_effect(self, constructor, initialization_args):
 		effect = constructor()
 		effect.sim = self
-		effect.initialization_Args = initialization_args
+		effect.initialization_args = initialization_args
 		effect.init(*initialization_args)
 		self.effects[effect] = effect
 		return effect
@@ -249,8 +249,7 @@ class GameSimulation:
 			# If negative, we delete the given entity.
 			if ent_id < 0:
 				print "Got kill signal:", ent_id
-				if -ent_id in self.entities:
-					self.entities.pop(-ent_id)
+				self.remove_entity(-ent_id)
 				continue
 			# If the entity ID is over one billion then it's a creation signal.
 			if ent_id > ENTITY_CREATION_OFFSET:
@@ -428,7 +427,7 @@ class Block(Entity):
 		# XXX: FIXME: For some reason if I set both position AND angle then the object
 		# loses all locally predicted motion, and is basically a streamed animation... :(
 		self.geom.setPos(pos)
-#		self.geom.setAxisAngle(axis_angle)
+		self.geom.setAxisAngle(axis_angle)
 		self.geom.setLinearVelocity(velo)
 		return i + 40
 
@@ -439,7 +438,7 @@ class Block(Entity):
 		link.glPushMatrix()
 		obj.convertIntoReferenceFrame()
 		bounds = [-t1, +t1, -t2, +t2, -t3, +t3]
-		link.draw_box(bounds, "data/crate.png")
+		link.draw_box(bounds, "data/stone.png")
 		link.glPopMatrix()
 
 class Boulder(Block):
@@ -947,13 +946,19 @@ class Player(GeomOnlyPatchMixin, Entity):
 		# Respawn over the cart.
 #		cart = self.sim.get_ent(lambda ent: isinstance(ent, Cart))
 		map_loader = self.sim.get_ent(lambda x: isinstance(x, MapLoader))
-		for location_name, xyz in map_loader.model.w.metadata["marker_locations"].iteritems():
-			if location_name == "M_Spawn%i" % self.sim.current_checkpoint_value:
-				print "Using location", location_name, "at", xyz
-				self.geom.setPos(xyz)
-				break
-		else:
-			print "ERROR! No spawn location for checkpoint value %i." % self.sim.current_checkpoint_value
+		respawn_locations = [
+			xyz for location_name, xyz in map_loader.model.w.metadata["marker_locations"].iteritems()
+			if "Respawn" in location_name
+		]
+		respawn_loc = random.choice(respawn_locations)
+		self.geom.setPos(respawn_loc)
+#		for location_name, xyz in map_loader.model.w.metadata["marker_locations"].iteritems():
+#			if location_name == "M_Spawn%i" % self.sim.current_checkpoint_value:
+#				print "Using location", location_name, "at", xyz
+#				self.geom.setPos(xyz)
+#				break
+#		else:
+#			print "ERROR! No spawn location for checkpoint value %i." % self.sim.current_checkpoint_value
 		self.geom.setLinearVelocity((0, 0, 0))
 
 	def try_to_jump(self):
@@ -976,6 +981,12 @@ class Player(GeomOnlyPatchMixin, Entity):
 				self.reload_cooldown = self.reload_interval
 			# Shoot, but only for the client.
 			self.sim.add_effect(Bullet, [self.get_xyz(), self.facing, self.tilt])
+			if self.sim.is_server_side:
+				for ent_id, ent in self.sim.entities.items():
+					if isinstance(ent, Block):
+						self.sim.remove_entity(ent_id)
+				for i in xrange(50):
+					self.sim.add_entity(Block, [(10.0 + i * 0.05, i * 0.05, 1.0 + i * 2.0)])
 
 	def try_to_command(self, command):
 		if command == "jump":
@@ -1026,12 +1037,12 @@ for cls in globals().values():
 
 def initialize_game(sim):
 	# Create a cart at the origin.
-	sim.add_entity(Cart, [(0, 0, 1.0)])
+#	sim.add_entity(Cart, [(0, 0, 1.0)])
 #	sim.add_entity(EnemySpawner, [(20, 0, 2), "j", 5.0])
 #	sim.add_entity(BigJumper, [(21, 1, 10)])
-#	for i in xrange(50):
-#		sim.add_entity(Block, [(20.0 + i * 0.05, i * 0.05, 1.0 + i * 2.0)])
+	for i in xrange(50):
+		sim.add_entity(Block, [(10.0 + i * 0.05, i * 0.05, 1.0 + i * 2.0)])
 
-	sim.add_entity(MapLoader, [(0, 0, 0), "map1"])
+	sim.add_entity(MapLoader, [(0, 0, 0), "map2"])
 #	sim.add_entity(RandomlyGeneratedTerrain, [(0, 0, 0), 10])
 
