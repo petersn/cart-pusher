@@ -22,14 +22,15 @@ void PhysicsWorld::step(Real dt) {
 	dynamicsWorld->stepSimulation(dt, 60);
 }
 
-bool PhysicsWorld::rayCast(btVector3 start, btVector3 end, btVector3& result, const btCollisionObject*& hit_collision_object, int collision_mask) {
+bool PhysicsWorld::rayCast(const btVector3& start, const btVector3& end, btVector3& result, btVector3& normal, const btCollisionObject*& hit_collision_object, int collision_mask) {
 	btCollisionWorld::ClosestRayResultCallback res(start, end);
 	res.m_collisionFilterGroup = collision_mask;
 	res.m_collisionFilterMask = collision_mask;
 	dynamicsWorld->rayTest(start, end, res);
 	if (res.hasHit()) {
 		result = res.m_hitPointWorld;
-		// Later if we need the collision surface normal we can get m_hitNormalWorld as well.
+		// Extract the collision surface normal via m_hitNormalWorld.
+		normal = res.m_hitNormalWorld;
 		hit_collision_object = res.m_collisionObject;
 		return true;
 	}
@@ -46,6 +47,24 @@ bool PhysicsWorld::checkForContact(PhysicsObject* a, PhysicsObject* b, int colli
 //		// TODO: Read out other properties of res, like normals here.
 //		return true;
 //	}
+	return false;
+}
+
+bool PhysicsWorld::convexSweepTest(Real radius, btVector3 start, btVector3 end, btVector3& result, btVector3& normal, const btCollisionObject*& hit_collision_object, int collision_mask) {
+	btCollisionWorld::ClosestConvexResultCallback res(start, end);
+	res.m_collisionFilterGroup = collision_mask;
+	res.m_collisionFilterMask = collision_mask;
+	btSphereShape shape(radius);
+	btTransform trans_from, trans_to;
+	trans_from.setOrigin(start);
+	trans_to.setOrigin(end);
+	dynamicsWorld->convexSweepTest(&shape, trans_from, trans_to, res);
+	if (res.hasHit()) {
+		result = res.m_hitPointWorld;
+		normal = res.m_hitNormalWorld;
+		hit_collision_object = res.m_hitCollisionObject;
+		return true;
+	}
 	return false;
 }
 
@@ -151,6 +170,23 @@ void PhysicsObject::setLinearVelocity(Real* velocity) {
 	rigidBody->btCollisionObject::setActivationState(ACTIVE_TAG);
 }
 
+void PhysicsObject::getAngularVelocity(Real* velocity) {
+	auto vel = rigidBody->getAngularVelocity();
+	velocity[0] = vel.getX();
+	velocity[1] = vel.getY();
+	velocity[2] = vel.getZ();
+}
+
+void PhysicsObject::setAngularVelocity(Real* velocity) {
+	rigidBody->setAngularVelocity(btVector3(velocity[0], velocity[1], velocity[2]));
+	rigidBody->btCollisionObject::setActivationState(ACTIVE_TAG);
+}
+
+void PhysicsObject::setLocalScaling(Real* scaling) {
+	shape->setLocalScaling(btVector3(scaling[0], scaling[1], scaling[2]));
+	rigidBody->btCollisionObject::setActivationState(ACTIVE_TAG);
+}
+
 void PhysicsObject::convertIntoReferenceFrame() {
 	btTransform trans;
 	motionState->getWorldTransform(trans);
@@ -165,7 +201,7 @@ void PhysicsObject::convertIntoReferenceFrame() {
 }
 
 void PhysicsObject::applyForce(Real x, Real y, Real z) {
-	rigidBody->applyForce(btVector3(x, y, z), btVector3(0, 0, 0));
+	rigidBody->applyCentralForce(btVector3(x, y, z));
 	// Call the parent class (btCollisionObject)'s setActivationState.
 	// According to the docs we should do this rather than calling the rigidBody's setActivationState, because it also sets some timer that keeps the object awake for a little bit.
 	rigidBody->btCollisionObject::setActivationState(ACTIVE_TAG);
@@ -175,6 +211,10 @@ void PhysicsObject::applyForce(Real x, Real y, Real z) {
 void PhysicsObject::applyCentralImpulse(Real x, Real y, Real z) {
 	rigidBody->applyCentralImpulse(btVector3(x, y, z));
 	rigidBody->btCollisionObject::setActivationState(ACTIVE_TAG);
+}
+
+void PhysicsObject::setLinearFactor(Real x, Real y, Real z) {
+	rigidBody->setLinearFactor(btVector3(x, y, z));
 }
 
 void PhysicsObject::setAngularFactor(Real x, Real y, Real z) {
@@ -330,15 +370,18 @@ extern "C" EXPORT void PhysicsWorld_step(PhysicsWorld* w, Real dt) {
 	w->step(dt);
 }
 
-extern "C" EXPORT int PhysicsWorld_rayCast(PhysicsWorld* w, Real* start, Real* end, Real* hit, PhysicsObject** hit_object, int collision_mask) {
+extern "C" EXPORT int PhysicsWorld_rayCast(PhysicsWorld* w, Real* start, Real* end, Real* hit, Real* normal, PhysicsObject** hit_object, int collision_mask) {
 	btVector3 vec_start(start[0], start[1], start[2]);
 	btVector3 vec_end(end[0], end[1], end[2]);
-	btVector3 result;
+	btVector3 result, normal_vec;
 	const btCollisionObject* hit_collision_object;
-	if (w->rayCast(vec_start, vec_end, result, hit_collision_object, collision_mask)) {
+	if (w->rayCast(vec_start, vec_end, result, normal_vec, hit_collision_object, collision_mask)) {
 		hit[0] = result.getX();
 		hit[1] = result.getY();
 		hit[2] = result.getZ();
+		normal[0] = normal_vec.getX();
+		normal[1] = normal_vec.getY();
+		normal[2] = normal_vec.getZ();
 		// Figure out which PhysicsObject has the given btCollisionObject.
 		for (auto obj : w->objects)
 			if (obj->rigidBody == hit_collision_object)
@@ -350,6 +393,27 @@ extern "C" EXPORT int PhysicsWorld_rayCast(PhysicsWorld* w, Real* start, Real* e
 
 extern "C" EXPORT int PhysicsWorld_checkForContact(PhysicsWorld* w, PhysicsObject* a, PhysicsObject* b, int collision_mask) {
 	return w->checkForContact(a, b, collision_mask);
+}
+
+extern "C" EXPORT int PhysicsWorld_convexSweepTest(PhysicsWorld* w, Real radius, Real* start, Real* end, Real* hit, Real* normal, PhysicsObject** hit_object, int collision_mask) {
+	btVector3 vec_start(start[0], start[1], start[2]);
+	btVector3 vec_end(end[0], end[1], end[2]);
+	btVector3 result, normal_vec;
+	const btCollisionObject* hit_collision_object;
+	if (w->convexSweepTest(radius, vec_start, vec_end, result, normal_vec, hit_collision_object, collision_mask)) {
+		hit[0] = result.getX();
+		hit[1] = result.getY();
+		hit[2] = result.getZ();
+		normal[0] = normal_vec.getX();
+		normal[1] = normal_vec.getY();
+		normal[2] = normal_vec.getZ();
+		// Figure out which PhysicsObject has the given btCollisionObject.
+		for (auto obj : w->objects)
+			if (obj->rigidBody == hit_collision_object)
+				*hit_object = obj;
+		return 1;
+	}
+	return 0;
 }
 
 extern "C" EXPORT int PhysicsWorld_listAllCollidingPairs(PhysicsWorld* w, PhysicsObject*** pairs) {
@@ -432,6 +496,20 @@ extern "C" EXPORT void PhysicsObject_setLinearVelocity(PhysicsObject* obj, Real 
 	obj->setLinearVelocity(velocity);
 }
 
+extern "C" EXPORT void PhysicsObject_getAngularVelocity(PhysicsObject* obj, Real* velocity) {
+	obj->getAngularVelocity(velocity);
+}
+
+extern "C" EXPORT void PhysicsObject_setAngularVelocity(PhysicsObject* obj, Real vx, Real vy, Real vz) {
+	Real velocity[3] = {vx, vy, vz};
+	obj->setAngularVelocity(velocity);
+}
+
+extern "C" EXPORT void PhysicsObject_setLocalScaling(PhysicsObject* obj, Real vx, Real vy, Real vz) {
+	Real scaling[3] = {vx, vy, vz};
+	obj->setLocalScaling(scaling);
+}
+
 extern "C" EXPORT void PhysicsObject_convertIntoReferenceFrame(PhysicsObject* obj) {
 	obj->convertIntoReferenceFrame();
 }
@@ -442,6 +520,10 @@ extern "C" EXPORT void PhysicsObject_applyForce(PhysicsObject* obj, Real x, Real
 
 extern "C" EXPORT void PhysicsObject_applyCentralImpulse(PhysicsObject* obj, Real x, Real y, Real z) {
 	obj->applyCentralImpulse(x, y, z);
+}
+
+extern "C" EXPORT void PhysicsObject_setLinearFactor(PhysicsObject* obj, Real x, Real y, Real z) {
+	obj->setLinearFactor(x, y, z);
 }
 
 extern "C" EXPORT void PhysicsObject_setAngularFactor(PhysicsObject* obj, Real x, Real y, Real z) {
