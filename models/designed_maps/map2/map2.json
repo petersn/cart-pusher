@@ -1,0 +1,21 @@
+{
+  "doors": {},
+  "textures": {
+    "Plane": "/afs/athena.mit.edu/user/s/n/snp/proj/cart-pusher/models/designed_maps/map2/MapTexture.png"
+  },
+  "curves": [],
+  "mesh_properties": {},
+  "marker_locations": {
+    "M_Respawn2": [
+      7.4546661376953125,
+      6.493310451507568,
+      0.4957472085952759
+    ],
+    "M_Respawn1": [
+      1.5111643075942993,
+      1.506622314453125,
+      0.4957472085952759
+    ]
+  },
+  "entities": []
+}
