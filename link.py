@@ -312,7 +312,7 @@ class PhysicsObject:
 
 	def getAngularVelocity(self):
 		array = (Real*3)()
-		PhyiscsObject_getAngularVelocity(self.ptr, array)
+		PhysicsObject_getAngularVelocity(self.ptr, array)
 		return array[:3]
 
 	def setAngularVelocity(self, velocity):
