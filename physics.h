@@ -33,12 +33,17 @@ public:
 	void setPosAxisAngle(Real xx, Real yy, Real zz, Real x, Real y, Real z, Real t);
 	void getLinearVelocity(Real* xyz);
 	void setLinearVelocity(Real* xyz);
-	void convertIntoReferenceFrame();
+	void getAngularVelocity(Real* xyz);
+	void setAngularVelocity(Real* xyz);
+	void setLocalScaling(Real* xyz);
+	virtual void convertIntoReferenceFrame();
 	void applyForce(Real x, Real y, Real z);
 	void applyCentralImpulse(Real x, Real y, Real z);
+	void setLinearFactor(Real x, Real y, Real z);
 	void setAngularFactor(Real x, Real y, Real z);
 	void setGravity(Real x, Real y, Real z);
 	void setKinematic(bool is_kinematic);
+	void setEntirelyEnabled(bool do_enable);
 	void removeFromWorld();
 };
 
@@ -85,8 +90,9 @@ public:
 
 	PhysicsWorld();
 	void step(Real dt);
-	bool rayCast(btVector3 start, btVector3 end, btVector3& result, const btCollisionObject*&, int collision_mask);
+	bool rayCast(const btVector3& start, const btVector3& end, btVector3& result, btVector3& normal, const btCollisionObject*&, int collision_mask);
 	bool checkForContact(PhysicsObject* a, PhysicsObject* b, int collision_mask);
+	bool convexSweepTest(Real radius, btVector3 start, btVector3 end, btVector3& result, btVector3& normal, const btCollisionObject*& hit_collision_object, int collision_mask);
 	std::set<std::pair<PhysicsObject*, PhysicsObject*>>* listAllCollidingPairs();
 };
 
@@ -94,8 +100,9 @@ public:
 
 extern "C" EXPORT PhysicsWorld* PhysicsWorld_new(void);
 extern "C" EXPORT void PhysicsWorld_step(PhysicsWorld* w, Real dt);
-extern "C" EXPORT int PhysicsWorld_rayCast(PhysicsWorld* w, Real* start, Real* end, Real* hit, PhysicsObject** hit_object, int collision_mask);
+extern "C" EXPORT int PhysicsWorld_rayCast(PhysicsWorld* w, Real* start, Real* end, Real* hit, Real* normal, PhysicsObject** hit_object, int collision_mask);
 extern "C" EXPORT int PhysicsWorld_checkForContact(PhysicsWorld* w, PhysicsObject* a, PhysicsObject* b, int collision_mask);
+extern "C" EXPORT int PhysicsWorld_convexSweepTest(PhysicsWorld* w, Real radius, Real* start, Real* end, Real* hit, Real* normal, PhysicsObject** hit_object, int collision_mask);
 extern "C" EXPORT int PhysicsWorld_listAllCollidingPairs(PhysicsWorld* w, PhysicsObject*** pairs);
 extern "C" EXPORT void delete_colliding_pairs_list(PhysicsObject** pairs);
 
@@ -113,9 +120,13 @@ extern "C" EXPORT void PhysicsObject_setAxisAngle(PhysicsObject* obj, Real x, Re
 extern "C" EXPORT void PhysicsObject_setPosAxisAngle(PhysicsObject* obj, Real xx, Real yy, Real zz, Real x, Real y, Real z, Real t);
 extern "C" EXPORT void PhysicsObject_getLinearVelocity(PhysicsObject* obj, Real* xyz);
 extern "C" EXPORT void PhysicsObject_setLinearVelocity(PhysicsObject* obj, Real vx, Real vy, Real vz);
+extern "C" EXPORT void PhysicsObject_getAngularVelocity(PhysicsObject* obj, Real* velocity);
+extern "C" EXPORT void PhysicsObject_setAngularVelocity(PhysicsObject* obj, Real vx, Real vy, Real vz);
+extern "C" EXPORT void PhysicsObject_setLocalScaling(PhysicsObject* obj, Real vx, Real vy, Real vz);
 extern "C" EXPORT void PhysicsObject_convertIntoReferenceFrame(PhysicsObject* obj);
 extern "C" EXPORT void PhysicsObject_applyForce(PhysicsObject* obj, Real x, Real y, Real z);
 extern "C" EXPORT void PhysicsObject_applyCentralImpulse(PhysicsObject* obj, Real x, Real y, Real z);
+extern "C" EXPORT void PhysicsObject_setLinearFactor(PhysicsObject* obj, Real x, Real y, Real z);
 extern "C" EXPORT void PhysicsObject_setAngularFactor(PhysicsObject* obj, Real x, Real y, Real z);
 extern "C" EXPORT void PhysicsObject_setGravity(PhysicsObject* obj, Real x, Real y, Real z);
 extern "C" EXPORT void PhysicsObject_setKinematic(PhysicsObject* obj, int is_kinematic);

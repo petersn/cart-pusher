@@ -111,6 +111,7 @@ K_RETURN = 13
 K_ESCAPE = 27
 K_TAB = 9
 K_BACKSPACE = 8
+K_DELETE = 127
 
 # Load up the library global variables.
 for c_type, names in [
@@ -159,8 +160,9 @@ get("glDeleteLists", None, [c_int, c_int], library=opengl_library)
 # Physics.
 get("PhysicsWorld_new", PhysicsWorldPointer, [])
 get("PhysicsWorld_step", None, [PhysicsWorldPointer, Real])
-get("PhysicsWorld_rayCast", c_int, [PhysicsWorldPointer, POINTER(Real), POINTER(Real), POINTER(Real), POINTER(PhysicsObjectPointer), c_int])
+get("PhysicsWorld_rayCast", c_int, [PhysicsWorldPointer, POINTER(Real), POINTER(Real), POINTER(Real), POINTER(Real), POINTER(PhysicsObjectPointer), c_int])
 get("PhysicsWorld_checkForContact", c_int, [PhysicsWorldPointer, PhysicsObjectPointer, PhysicsObjectPointer, c_int])
+get("PhysicsWorld_convexSweepTest", c_int, [PhysicsWorldPointer, Real, POINTER(Real), POINTER(Real), POINTER(Real), POINTER(Real), POINTER(PhysicsObjectPointer), c_int])
 get("PhysicsWorld_listAllCollidingPairs", c_int, [PhysicsWorldPointer, POINTER(POINTER(PhysicsObjectPointer))])
 get("delete_colliding_pairs_list", None, [POINTER(PhysicsObjectPointer)])
 
@@ -179,9 +181,13 @@ get("PhysicsObject_setAxisAngle", None, [PhysicsObjectPointer, Real, Real, Real,
 get("PhysicsObject_setPosAxisAngle", None, [PhysicsObjectPointer, Real, Real, Real, Real, Real, Real, Real])
 get("PhysicsObject_getLinearVelocity", None, [PhysicsObjectPointer, POINTER(Real)])
 get("PhysicsObject_setLinearVelocity", None, [PhysicsObjectPointer, Real, Real, Real])
+get("PhysicsObject_getAngularVelocity", None, [PhysicsObjectPointer, POINTER(Real)])
+get("PhysicsObject_setAngularVelocity", None, [PhysicsObjectPointer, Real, Real, Real])
+get("PhysicsObject_setLocalScaling", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_convertIntoReferenceFrame", None, [PhysicsObjectPointer])
 get("PhysicsObject_applyForce", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_applyCentralImpulse", None, [PhysicsObjectPointer, Real, Real, Real])
+get("PhysicsObject_setLinearFactor", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_setAngularFactor", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_setGravity", None, [PhysicsObjectPointer, Real, Real, Real])
 get("PhysicsObject_setKinematic", None, [PhysicsObjectPointer, c_int])
@@ -271,6 +277,7 @@ class PhysicsObject:
 	def removeFromWorld(self):
 		if self.ptr != None:
 			PhysicsObject_removeFromWorld(self.ptr)
+		self.ptr = None
 
 	def getPos(self):
 		array = (Real*3)()
@@ -303,6 +310,17 @@ class PhysicsObject:
 	def setLinearVelocity(self, velocity):
 		PhysicsObject_setLinearVelocity(self.ptr, velocity[0], velocity[1], velocity[2])
 
+	def getAngularVelocity(self):
+		array = (Real*3)()
+		PhyiscsObject_getAngularVelocity(self.ptr, array)
+		return array[:3]
+
+	def setAngularVelocity(self, velocity):
+		PhysicsObject_setAngularVelocity(self.ptr, velocity[0], velocity[1], velocity[2])
+
+	def setLocalScaling(self, scaling):
+		PhysicsObject_setLocalScaling(self.ptr, scaling[0], scaling[1], scaling[2])
+
 	def convertIntoReferenceFrame(self):
 		PhysicsObject_convertIntoReferenceFrame(self.ptr)
 
@@ -311,6 +329,9 @@ class PhysicsObject:
 
 	def applyCentralImpulse(self, x, y, z):
 		PhysicsObject_applyCentralImpulse(self.ptr, x, y, z)
+
+	def setLinearFactor(self, x, y, z):
+		PhysicsObject_setLinearFactor(self.ptr, x, y, z)
 
 	def setAngularFactor(self, x, y, z):
 		PhysicsObject_setAngularFactor(self.ptr, x, y, z)
@@ -395,8 +416,8 @@ class BvhTriangleMesh(PhysicsObject):
 		PhysicsObject.__init__(self, parent)
 
 class RayHit:
-	def __init__(self, hit_object, xyz):
-		self.hit_object, self.xyz = hit_object, xyz
+	def __init__(self, hit_object, xyz, normal):
+		self.hit_object, self.xyz, self.normal = hit_object, xyz, normal
 
 class PhysicsWorld:
 	def __init__(self):
@@ -410,18 +431,33 @@ class PhysicsWorld:
 		a1 = (Real*3)(*start)
 		a2 = (Real*3)(*end)
 		res = (Real*3)()
+		normal = (Real*3)()
 		hit_object = PhysicsObjectPointer()
-		if PhysicsWorld_rayCast(self.world_ptr, a1, a2, res, ctypes.byref(hit_object), collision_mask):
+		if PhysicsWorld_rayCast(self.world_ptr, a1, a2, res, normal, ctypes.byref(hit_object), collision_mask):
+#			print hit_object.contents
+			hit_address = address_from_pointer(hit_object)
+			hit_object = self.pointer_to_physics_object[hit_address]
+			# Figure out who this is.
+			return RayHit(hit_object, res[:3], normal[:3])
+		# Return None if there is no hit.
+
+	def checkForContact(self, objA, objB, collision_mask=0x7fff):
+		assert False, "This routine currently doesn't work."
+		return PhysicsWorld_checkForContact(objA.ptr, objB.ptr, collision_mask)
+
+	def convexSweepTest(self, radius, start, end, collision_mask=0x7fff):
+		a1 = (Real*3)(*start)
+		a2 = (Real*3)(*end)
+		res = (Real*3)()
+		normal = (Real*3)()
+		hit_object = PhysicsObjectPointer()
+		if PhysicsWorld_rayCast(self.world_ptr, radius, a1, a2, res, normal, ctypes.byref(hit_object), collision_mask):
 #			print hit_object.contents
 			hit_address = address_from_pointer(hit_object)
 			hit_object = self.pointer_to_physics_object[hit_address]
 			# Figure out who this is.
 			return RayHit(hit_object, res[:3])
 		# Return None if there is no hit.
-
-	def checkForContact(self, objA, objB, collision_mask=0x7fff):
-		assert False, "This routine currently doesn't work."
-		return PhysicsWorld_checkForContact(objA.ptr, objB.ptr, collision_mask)
 
 	def listAllCollidingPairs(self):
 		ptr = POINTER(PhysicsObjectPointer)()

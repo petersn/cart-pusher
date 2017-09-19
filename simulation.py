@@ -414,22 +414,24 @@ class Block(Entity):
 		s.append(struct.pack("<3f", *self.geom.getPos()))
 		s.append(struct.pack("<3f", *self.geom.getLinearVelocity()))
 		s.append(struct.pack("<4f", *self.geom.getAxisAngle()))
-		# TODO: Also get the angular velocity and save that.
+		s.append(struct.pack("<3f", *self.geom.getAngularVelocity()))
 		return "".join(s)
 
 	def apply_patch(self, patch, i, jitter=0.0):
 		pos  = struct.unpack("<3f", patch[i:i+12])
 		velo = struct.unpack("<3f", patch[i+12:i+24])
 		axis_angle = struct.unpack("<4f", patch[i+24:i+40])
+		ang_velo = struct.unpack("<3f", patch[i+40:i+52])
 		if USE_JITTER_CORRECTION:
 			pos = np.array(pos) - np.array(velo) * jitter
 			# TODO: Once the angular velocity is encoded, also jitter correct axis_angle here.
 		# XXX: FIXME: For some reason if I set both position AND angle then the object
 		# loses all locally predicted motion, and is basically a streamed animation... :(
 		self.geom.setPos(pos)
-		self.geom.setAxisAngle(axis_angle)
 		self.geom.setLinearVelocity(velo)
-		return i + 40
+		self.geom.setAxisAngle(axis_angle)
+		self.geom.setAngularVelocity(ang_velo)
+		return i + 52
 
 	def draw(self):
 		obj = self.geom
