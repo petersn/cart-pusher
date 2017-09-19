@@ -145,7 +145,7 @@ void PhysicsObject::setAxisAngle(Real x, Real y, Real z, Real t) {
 	motionState->getWorldTransform(trans);
 //	trans.setOrigin(btVector3(xx, yy, zz));
 	trans.setRotation(btQuaternion(btVector3(x, y, z), t));
-	motionState->setWorldTransform(trans);
+//	motionState->setWorldTransform(trans);
 	rigidBody->setWorldTransform(trans);
 }
 
